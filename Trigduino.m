@@ -4,6 +4,8 @@ classdef Trigduino < handle
         Buffer      (1,:) double {mustBeInteger,mustBeNonnegative,mustBeLessThanOrEqual(Buffer,4096)} = 0;
         NPulses     (1,1) double {mustBePositive,mustBeInteger,mustBeFinite} = 1;
         InterPulseInterval (1,1) double {mustBeNonnegative,mustBeFinite} = 1e-3; % seconds
+        PulseDuration (1,1) double {mustBeNonnegative,mustBeFinite} = 1e-3; % seconds
+        PulseModeOn  (1,1) logical = true;
         SamplingRate (1,1) double {mustBePositive,mustBeInteger,mustBeFinite} = 1000;
         
         timeout     (1,1) double {mustBePositive} = 10;
@@ -105,6 +107,18 @@ classdef Trigduino < handle
             assert(i==ipi, ...
                 'Trigduino:InterPulseInterval:FailedToSetValue', ...
                 'Sent I%d but received %s in response!',ipi,s);
+        end
+        
+        
+        
+        function set.PulseDuration(obj,dur)
+            obj.PulseDuration = dur; % set in seconds            
+            dur = round(dur*1e6); % s -> microseconds
+            obj.write('P%d',dur);
+            [s,~,i] = obj.read;
+            assert(i==dur, ...
+                'Trigduino:InterPulseInterval:FailedToSetValue', ...
+                'Sent I%d but received %s in response!',dur,s);
         end
         
 %         function n = get.InterPulseInterval(obj)

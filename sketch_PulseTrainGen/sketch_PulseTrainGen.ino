@@ -3,17 +3,13 @@
 // Onboard LED properties
 const int ledPin = LED_BUILTIN;// the number of the LED pin
 
+// Digital trigger pin
+const int digPin = 12;
+
 // Analog DAC0 pin (DUE)
 const int dacPin = 76; // DUE DAC0 pin = 76, DAC1 pin = 77
 const int dacRes = 12; // 12-bit max resolution for DUE
 unsigned int Fs = 1000; // sampling rate for DAC
-
-// Setable Trigger properties
-bool triggered = false; // Triggers pulse train when set to true
-// Automatically set to false when pulse train is completed,
-// when halted early via serial command ("H"),
-// or if triggered is set to false (equivalent to serial command "H")
-
 
 
 // Private Trigger properties
@@ -24,6 +20,8 @@ unsigned int ipi = 250000; // inter-pulse interval (microseconds)
 unsigned int nPulses = 10; // number of pulses to present; 0 = infinite
 int pulseBuffer[20000]; // preallocated buffer gets overwritten with new data
 unsigned int bufferSize = 0;
+unsigned int pulseDuration = 250000; // digital pulse duration (microseconds)
+bool pulseModeOn = true;
 
 
 void setup() {
@@ -35,7 +33,7 @@ void setup() {
   }
   analogWriteResolution(dacRes);
   pinMode(ledPin, OUTPUT);
-
+  pinMode(digPin, OUTPUT);
   establishConnection();
 }
 
@@ -61,11 +59,25 @@ void loop() {
 }
 
 
+void playDigital() {
+  
+  trigOnset = micros();
+
+  for (unsigned int j = 0; j < nPulses; j ++) {
+    digitalWrite(ledPin, HIGH);
+    digitalWrite(digPin, HIGH);
+    delayMicroseconds(pulseDuration); // delay next update by artificial sampling rate
+    digitalWrite(ledPin, LOW);
+    digitalWrite(digPin, LOW);
+    delayMicroseconds(ipi);
+  } // j
+
+} // playDigital()
+
 void playBuffer() {
 
   unsigned long dt = 1000000 / Fs; // sample interval s -> us
 
-  triggered = true;
   
   trigOnset = micros();
 
@@ -84,7 +96,6 @@ void playBuffer() {
     }
   } // j
 
-  triggered = false;
 
  // Serial.println("done");
 } // playBuffer()
@@ -100,27 +111,42 @@ void readSerial() {
   delay(200);
 
   switch (ctrlChar) {
+    case 'M': // Pulse Mode On
+      {
+        pulseModeOn = Serial.parseInt();
+        Serial.print("M");
+        Serial.println(pulseModeOn,DEC);
+        break;
+      }
     case 'T': // Trigger pulse train
       {
-        playBuffer();
+        if (pulseModeOn == true) {
+          playDigital();
+        } else {
+          playBuffer();
+        }
         break;
       }
 
     case 'I': // Set inter-pulse interval
       {
-       // if (Serial.available() > 0) {
-          ipi = Serial.parseInt();
-       // }
+        ipi = Serial.parseInt();
         Serial.print("I");
         Serial.println(ipi, DEC);
         break;
       }
 
+    case 'P': // Set digital pulse duration (microseconds) if pulseModeOn = true
+      {
+        pulseDuration = Serial.parseInt();
+        Serial.print("P");
+        Serial.println(pulseDuration, DEC);
+        break;
+      }
+      
     case 'N': // Set number of pulses
       {
-       // if (Serial.available() > 0) {
-          nPulses = Serial.parseInt();
-       // }
+        nPulses = Serial.parseInt();
         Serial.print("N");
         Serial.println(nPulses, DEC);
         break;
@@ -149,14 +175,12 @@ void readSerial() {
 
     case 'S': // Set sampling rate for DAC
       {
-//        if (Serial.available() > 0) {
-//          Serial.println('X');
-          Fs = Serial.parseInt();
-//        }
+        Fs = Serial.parseInt();
         Serial.print('S');
         Serial.println(Fs);
         break;
       }
+
   }
 
   Serial.flush();
