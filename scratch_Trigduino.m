@@ -8,16 +8,54 @@ A = Trigduino("COM3");
 
 A.connect;
 
-%% Number of pulses to present
 
-A.NPulses = 50;
+%%
+A.NPulses = 1;
+A.InterPulseInterval = 1;
+A.PulseDuration = 1;
 
-%% Inter pulse interval (seconds)
+%% Rate
 
-A.InterPulseInterval = 0.025; % seconds
+Freq = 20;
 
-%% Pulse duration (seconds)
-A.PulseDuration = 0.025; % seconds
+A.NPulses = 20;
+
+A.InterPulseInterval = 1/(Freq*2); % seconds
+A.PulseDuration = 1/(Freq*2);
+
+
+
+%% Trigger one or multiple pulse trains
+
+nTrains = 60;
+
+iti = 4; % seconds
+
+trainDur = A.NPulses*(A.PulseDuration + A.InterPulseInterval);
+iti = iti + trainDur;
+
+fprintf('%d trains of\n\t%d pulses\n\tinter-pulse interval = %g\n\tpulse duration = %g\n', ...
+    nTrains,A.NPulses,A.InterPulseInterval,A.PulseDuration)
+
+for i = 1:nTrains
+    
+    A.trigger;
+
+    fprintf('Triggered train %d of %d\n',i,nTrains)
+    
+    if i < nTrains
+        pause(iti)
+    else
+        pause(trainDur)
+    end
+end
+
+fprintf(2,'done\n')
+
+
+
+
+
 
 
 
