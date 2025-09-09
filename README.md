@@ -8,7 +8,6 @@ Simple Arduino Due + MATLAB toolkit for generating precise, arbitrary pulse trai
 - `TrigduinoGUI.m` – MATLAB App/UI for configuring and running pulse trains without code.
 - `sketch_PulseTrainGen/` – Arduino sketch for the Due that generates the pulse trains.
 - `scratch_Trigduino.m` – Small script with example/debug snippets.
-- Datasheets/notes: `LM358A_D-2314983.pdf`, `ArduPicLab_ How to modify analog output range of Arduino Due.pdf`.
 
 ## Requirements
 
