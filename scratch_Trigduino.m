@@ -1,29 +1,34 @@
 %%
-cd C:\Users\Daniel\src\Trigduino
+cd C:\src\Trigduino
 
 %%
 serialportlist
 %%
-A = Trigduino("COM3");
+A = Trigduino("COM4");
 
 A.connect;
 
+A.Calibration = -5e-6;
 
-%%
-A.NPulses = 1;
-A.InterPulseInterval = 1;
-A.PulseDuration = 1;
+%% Count
+A.NPulses = 10;
+A.InterPulseInterval = 1e-4;
+A.PulseDuration = 1e-4;
+
+A.info
+
+A.trigger;
 
 %% Rate
 
-Freq = 20;
+Freq = 100;
 
-A.NPulses = 20;
+A.NPulses = 100;
 
 A.InterPulseInterval = 1/(Freq*2); % seconds
 A.PulseDuration = 1/(Freq*2);
 
-
+A.trigger;
 
 %% Trigger one or multiple pulse trains
 
@@ -53,6 +58,11 @@ end
 fprintf(2,'done\n')
 
 
+%%
+
+
+
+
 
 
 
@@ -67,6 +77,8 @@ A.PulseModeOn = false;
 %% Arduino sampling rate
 
 A.SamplingRate = 1000;
+
+
 %% Define what each pulse looks like
 
 pulseDuration = 0.05; % seconds
@@ -77,9 +89,9 @@ n = round(A.SamplingRate.*pulseDuration);
 
 mv = 2^12-1; % [0 4095]
 
-A.Buffer = mv*ones(1,n); % square wave
+% A.Buffer = mv*ones(1,n); % square wave
 % A.Buffer = [round(mv*triang(n)); 0]';
-% A.Buffer = [round(mv*gausswin(n)); 0]';
+A.Buffer = repmat([round(mv*gausswin(n)); 0],10,1)';
 
 %%
 
