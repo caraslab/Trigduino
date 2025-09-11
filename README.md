@@ -1,97 +1,100 @@
-# Trigduino
+* Use Arduino Due programmed with `sketch_PWMTrainGen.ino`
+# PWM Train Generator — Concise User Manual
+## What it is
 
-Simple Arduino Due + MATLAB toolkit for generating precise, arbitrary pulse trains to control external devices (e.g., stimulus hardware, LEDs, shutters).
+A timer-driven Arduino Due sketch that outputs **pulse trains** on a **digital pin**.  
+Inside each **pulse window**, the pin carries a **square-wave carrier (PWM)** whose **duty cycle** controls the _average open time_ of a shutter. Between pulses and between trains the pin is LOW.
 
-## Repository layout
+- Default output pin: **D6** (3.3 V TTL).
+- Optional compile-time LED at pulse **window** boundaries (off by default).
 
-- `Trigduino.m` – MATLAB class that talks to the Arduino over serial.
-- `TrigduinoGUI.m` – MATLAB App/UI for configuring and running pulse trains without code.
-- `sketch_PulseTrainGen/` – Arduino sketch for the Due that generates the pulse trains.
-- `scratch_Trigduino.m` – Small script with example/debug snippets.
-- Datasheets/notes: `LM358A_D-2314983.pdf`, `ArduPicLab_ How to modify analog output range of Arduino Due.pdf`.
-
+---
 ## Requirements
 
-- **Hardware:** Arduino **Due** (Programming Port via USB).
-- **Software:** Arduino IDE (with *Arduino SAM Boards* installed), MATLAB R2019b+ (uses `serialport`).
-- **OS:** Windows/macOS/Linux (any OS with a working serial COM/TTY device).
-- **Optional:** Simple op-amp/buffer if you need higher-voltage or analog outputs (see PDFs).
+- **Board:** Arduino **Due** (SAM3X8E).
+- **Wiring:** D6 → shutter controller TTL input; GND → shutter ground (common ground).
+- **Serial:** 115200 baud; line ending = **Newline** (or “Both NL & CR”).
+
+---
+## Commands (simple protocol)
+
+|Command|Meaning|Notes|
+|---|---|---|
+|`R`|Handshake|Replies `R`.|
+|`CFG <pulse_us> <ipi_us> <pulses_per_train> <iti_us> <duty_pct> [pwm_hz]`|Configure timing|See parameters below. Echoes `OK …` with resolved values.|
+|`GO`|Start|Begins continuous train sequence with current config.|
+|`STOP`|Stop|Immediately stops and drives output LOW.|
+
+### Parameters (in `CFG`)
+
+- `pulse_us` — **Pulse window** length (µs).
+- `ipi_us` — Inter-pulse interval **within** a train (µs).
+- `pulses_per_train` — Number of pulses per train.
+- `iti_us` — Inter-train interval (µs).
+- `duty_pct` — 0–100. **PWM duty** _inside_ each pulse window.
+    - 100 → HIGH for entire window (no carrier toggling).
+    - 50 → equal HIGH/LOW segments at the carrier frequency inside the window.        
+- `[pwm_hz]` — _(optional)_ Carrier frequency **during** the pulse window (default **50000 Hz**).
+
+**Behavior:** Trains **repeat indefinitely**: pulse windows and IPIs form a train; trains are separated by ITI; sequence loops until `STOP`.
+
+---
 
 ## Quick start
 
-1. **Clone** the repo and add it to your MATLAB path.
-2. **Flash the Due:**
-   - Open Arduino IDE → *File → Open…* → select the sketch in `sketch_PulseTrainGen/`.
-   - *Tools → Board:* **Arduino Due (Programming Port)** → select correct Port → **Upload**.
-3. **Connect hardware:** Wire your target device to the selected Due digital output pin (TTL level).
-4. **Run the GUI (easiest):**
-   - In MATLAB: `TrigduinoGUI`
-   - Select the serial port, set pulse parameters (frequency, pulse width, count, pin, etc.), then **Preview** or **Run**.
-5. **Programmatic control (minimal example):**
-   ```matlab
-   % Create, connect, configure, run, stop
-   td = Trigduino;               % create the interface
-   td.connect("COM5");           % your COM/tty device
-   cfg = struct( ...
-       "pin", 6, ...             % Due digital pin
-       "frequency_Hz", 20, ...
-       "pulseWidth_us", 500, ...
-       "nPulses", 50, ...
-       "polarity", "activeHigh", ...
-       "startDelay_ms", 0);
-   td.configure(cfg);            % send all parameters
-   td.preview();                 % optional scope/LED check
-   td.run();                     % start generation
-   td.stop();                    % stop early (if needed)
-   td.disconnect();
-   ```
+1. Open Serial Monitor (115200, newline).
+2. Send a config, then `GO`.
 
-## MATLAB API (overview)
+**Example (100% duty):**
 
-> Exact names may vary slightly; see method help in `Trigduino.m` for signatures and defaults.
+```
+CFG 15000 35000 20 5000000 100 
+GO
+```
+→ Pulse windows: 15 ms, spaced by 35 ms; 20 pulses per train; 5 s between trains; output stays HIGH through each window.
 
-- **Construction & I/O**
-  - `Trigduino` – create interface object.
-  - `connect(port)` / `disconnect()` – open/close serial to the Due.
-  - `ping()` – sanity check that the sketch is responsive.
-- **Configuration**
-  - `configure(cfgStruct)` – set all parameters in one call.
-  - Convenience setters for common fields (if you prefer individual calls), e.g., `setPin`, `setFrequency`, `setPulseWidth`, `setCount`, `setPolarity`, `setStartDelay`.
-- **Execution**
-  - `preview()` – arm with current settings and emit a short test pattern.
-  - `run()` – start the full pulse train.
-  - `pause()` / `stop()` – control during playback.
-- **Utilities**
-  - `readback()` – query current configuration from the device.
-  - `saveConfig(file)` / `loadConfig(file)` – store/load parameter presets.
-  - `version()` – report firmware/software versions.
+**Same timings at 50% duty:**
+```
+CFG 15000 35000 20 5000000 50
+GO
+```
 
-The **GUI** (`TrigduinoGUI.m`) wraps the same operations with buttons and fields. Typical controls include **Connect**, **Preview**, **Run**, **Pause**, **Stop**, and **Save/Load Config**.
+→ Within each 15 ms window the pin toggles at the carrier (default 1 kHz) with 50% duty.
 
-## Typical parameters
+**Make the carrier explicit (e.g., 2 kHz):**
+```
+CFG 15000 35000 20 5000000 50 2000
+GO
+```
 
-- **pin** – Due digital output (e.g., 6).
-- **frequency_Hz** – pulse repetition rate.
-- **pulseWidth_us** – pulse width (microseconds).
-- **nPulses** – number of pulses in a train.
-- **polarity** – `"activeHigh"` or `"activeLow"`.
-- **startDelay_ms** – delay before the train begins.
 
-> The Arduino sketch programs the Due’s timers/IO to produce deterministic TTL pulses according to these fields; stick to ranges supported by the SAM3X8E and your wiring.
+---
 
-## Notes & safety
+## Notes & limits
 
-- Outputs are **3.3 V TTL** (Due). Level-shift if your device expects 5 V.
-- Add buffering/isolators when driving coils/relays or long cables.
-- If you need >3.3 V analog, see the included Due DAC range note and LM358A datasheet.
+- **Voltage:** Due I/O is **3.3 V TTL**. Use a level shifter if the shutter expects 5 V.
+- **Time resolution:** Internally ~0.1 µs scheduling; practical PWM **carrier** limit with ISR toggling is ~**20–50 kHz**. For very high carriers, consider hardware PWM gating.
+- **LED:** By default **disabled** to avoid overhead. To enable a **window-boundary** indicator only, add at top of sketch:  
+    `#define WINDOW_LED 1`
+
+---
 
 ## Troubleshooting
 
-- **“Port in use”:** Close Arduino Serial Monitor and any other apps; `clear` MATLAB objects; power-cycle the Due.
-- **No pulses:** Verify `pin` wiring, polarity, and that **Run** (not just **Preview**) is pressed.
-- **Timing limits:** Extremely short widths or very high frequencies may be hardware-limited.
+- **No response to `GO`:** Ensure you got an `OK …` echo after `CFG`. Check Serial line ending (must send newline).
+- **No output on D6:** Verify wiring and ground; try 100% duty to see a solid HIGH during the window.
+- **Looks unchanged when switching duty:** If `pulse_us` and `ipi_us` already yield a 50/50 period, `duty=50` matches that. Try a clearly different duty (e.g., 20 or 80) or set `pwm_hz` lower to see toggling on a scope.
 
-## Contributing / License
+---
 
-Open an issue or PR with proposed changes.
-If you need a formal license, open an issue to discuss—no license file is currently present in the repo.
+## Changing the output pin (optional)
+
+Edit at the top of the sketch:
+
+`#define DIGITAL_OUT_PIN 6   // set to your desired Due digital pin`
+
+Recompile and upload.
+
+---
+
+That’s it—configure with `CFG …`, start with `GO`, stop with `STOP`.
