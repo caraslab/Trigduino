@@ -42,6 +42,8 @@ A MATLAB app to parameterize and trigger pulse trains on an **Arduino Due**. It 
 
    * `Connection ▸ Disconnect` when finished (the app also cleans up on close).
 
+<img width="1202" height="774" alt="image" src="https://github.com/user-attachments/assets/ffba5a1e-4f66-44a5-937f-a2d6070fe35b" />
+
 ---
 
 ## What the GUI Shows
