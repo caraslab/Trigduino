@@ -131,14 +131,10 @@ writeline(s, "STOP");
 
 ## Troubleshooting
 
-- **No response to commands:** Confirm newline (`\n`) terminator and 115200 baud.
 - **No PWM output:** Verify `duty_pct > 0`, `pulses_per_train ≥ 1`, and the correct **DIGITAL\_OUT\_PIN** wiring.
 - **COUNT always 0:** `COUNT` resets on `GO`; query after at least one train completes.
 - **Change pins/frequency:** Edit the `#define` section at the top of the sketch.
 
 ---
 
-## License
-
-MIT or similar—adapt as needed for your project.
 
