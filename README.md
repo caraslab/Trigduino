@@ -1,100 +1,144 @@
-* Use Arduino Due programmed with `sketch_PWMTrainGen.ino`
-# PWM Train Generator — Concise User Manual
-## What it is
+# PWM Train Generator for Arduino Due (with Sync Outputs)
 
-A timer-driven Arduino Due sketch that outputs **pulse trains** on a **digital pin**.  
-Inside each **pulse window**, the pin carries a **square-wave carrier (PWM)** whose **duty cycle** controls the _average open time_ of a shutter. Between pulses and between trains the pin is LOW.
+This sketch generates pulse **trains** composed of fixed-duration **pulse windows**. Inside each pulse window, a PWM **carrier** runs at a configurable duty cycle and frequency. Two **non‑PWM sync lines** provide clean logic‑level markers for external hardware:
 
-- Default output pin: **D6** (3.3 V TTL).
-- Optional compile-time LED at pulse **window** boundaries (off by default).
+- **PULSE\_INDICATOR\_PIN** (default **10**): HIGH for the duration of each pulse window.
+- **TRAIN\_INDICATOR\_PIN** (default **12**): HIGH for the duration of each train (from first pulse start to last pulse end).
 
----
-## Requirements
-
-- **Board:** Arduino **Due** (SAM3X8E).
-- **Wiring:** D6 → shutter controller TTL input; GND → shutter ground (common ground).
-- **Serial:** 115200 baud; line ending = **Newline** (or “Both NL & CR”).
-
----
-## Commands (simple protocol)
-
-|Command|Meaning|Notes|
-|---|---|---|
-|`R`|Handshake|Replies `R`.|
-|`CFG <pulse_us> <ipi_us> <pulses_per_train> <iti_us> <duty_pct> [pwm_hz]`|Configure timing|See parameters below. Echoes `OK …` with resolved values.|
-|`GO`|Start|Begins continuous train sequence with current config.|
-|`STOP`|Stop|Immediately stops and drives output LOW.|
-
-### Parameters (in `CFG`)
-
-- `pulse_us` — **Pulse window** length (µs).
-- `ipi_us` — Inter-pulse interval **within** a train (µs).
-- `pulses_per_train` — Number of pulses per train.
-- `iti_us` — Inter-train interval (µs).
-- `duty_pct` — 0–100. **PWM duty** _inside_ each pulse window.
-    - 100 → HIGH for entire window (no carrier toggling).
-    - 50 → equal HIGH/LOW segments at the carrier frequency inside the window.        
-- `[pwm_hz]` — _(optional)_ Carrier frequency **during** the pulse window (default **50000 Hz**).
-
-**Behavior:** Trains **repeat indefinitely**: pulse windows and IPIs form a train; trains are separated by ITI; sequence loops until `STOP`.
+The PWM/carrier itself is on **DIGITAL\_OUT\_PIN** (default **6**) and is only active during pulse windows.
 
 ---
 
-## Quick start
+## Features
 
-1. Open Serial Monitor (115200, newline).
-2. Send a config, then `GO`.
+- Microsecond scheduling of pulse and train timing using **TC0** (SAM3X8E) at **MCK/8 ≈ 10.5 MHz** (\~0.095 µs tick).
+- PWM **inside** the pulse window with configurable **duty (0–100%)** and **frequency**.
+- **Non‑PWM** sync outputs for robust triggering/recording: pulse window (pin 10) and train window (pin 12).
+- **Finite** or **infinite** presentations: set `ntrains=0` for infinite.
+- **COUNT** query returns the number of trains completed **since last **`` (counter resets on `GO`).
+- Optional `WINDOW_LED` to indicate pulse windows with the built‑in LED.
 
-**Example (100% duty):**
+> **Voltage levels:** Arduino Due I/O is **3.3 V**. Do **not** connect directly to 5 V inputs without level shifting.
+
+---
+
+## Pinout (defaults)
+
+- **DIGITAL\_OUT\_PIN = 6** → PWM/carrier output (active only during pulse windows)
+- **PULSE\_INDICATOR\_PIN = 10** → High while a pulse window is active (non‑PWM)
+- **TRAIN\_INDICATOR\_PIN = 12** → High while a train is active (non‑PWM)
+- **LED\_BUILTIN** (optional via `#define WINDOW_LED 1`): mirrors pulse window
+
+You may change pins by editing the `#define` values at the top of the sketch.
+
+---
+
+## Serial Protocol
+
+All commands are ASCII and must end with a **newline** (`\n`). Default serial: **115200 baud**.
+
+### Commands
+
+- `R` → Responds with `R` (handshake/test)
+- `CFG <pulse_us> <ipi_us> <pulses_per_train> <iti_us> <duty_pct> [pwm_hz] [ntrains]`
+- `GO` → Start playback with the current configuration (resets train counter)
+- `STOP` → Stop playback immediately
+- `COUNT` → Prints `COUNT=<integer>`; trains completed since last `GO`
+
+### `CFG` Arguments
+
+| Arg | Name               | Units | Description                                                       |
+| --- | ------------------ | ----- | ----------------------------------------------------------------- |
+| 1   | `pulse_us`         | µs    | Pulse window length (duration of ON window for carrier)           |
+| 2   | `ipi_us`           | µs    | Inter‑pulse interval **within** a train                           |
+| 3   | `pulses_per_train` | count | Number of pulses per train (minimum 1)                            |
+| 4   | `iti_us`           | µs    | Inter‑train interval (time between trains)                        |
+| 5   | `duty_pct`         | %     | PWM duty **inside** the pulse window (0–100)                      |
+| 6   | `pwm_hz`           | Hz    | *(optional)* Carrier frequency; if omitted, current value is kept |
+| 7   | `ntrains`          | count | *(optional)* Number of trains; **0 = infinite**                   |
+
+On success, the device responds with a line echoing the applied parameters.
+
+### Examples
+
+**Infinite trains at 10 kHz carrier, 100% duty**
 
 ```
-CFG 15000 35000 20 5000000 100 
+CFG 15000 35000 20 5000000 100 10000 0
 GO
 ```
-→ Pulse windows: 15 ms, spaced by 35 ms; 20 pulses per train; 5 s between trains; output stays HIGH through each window.
 
-**Same timings at 50% duty:**
+**Fifteen trains at 20 kHz carrier, 50% duty**
+
 ```
-CFG 15000 35000 20 5000000 50
+CFG 20000 30000 10 1000000 50 20000 15
 GO
 ```
 
-→ Within each 15 ms window the pin toggles at the carrier (default 1 kHz) with 50% duty.
+**Query count and stop**
 
-**Make the carrier explicit (e.g., 2 kHz):**
 ```
-CFG 15000 35000 20 5000000 50 2000
-GO
+COUNT
+STOP
 ```
-
 
 ---
 
-## Notes & limits
+## Timing Notes
 
-- **Voltage:** Due I/O is **3.3 V TTL**. Use a level shifter if the shutter expects 5 V.
-- **Time resolution:** Internally ~0.1 µs scheduling; practical PWM **carrier** limit with ISR toggling is ~**20–50 kHz**. For very high carriers, consider hardware PWM gating.
-- **LED:** By default **disabled** to avoid overhead. To enable a **window-boundary** indicator only, add at top of sketch:  
-    `#define WINDOW_LED 1`
+- The timer runs at **MCK/8 ≈ 10.5 MHz**; all microsecond delays are **ceil‑quantized** to \~0.095 µs ticks.
+- Inside a pulse window, the PWM alternates using the configured period and duty. Edge cases are handled to avoid zero‑length segments when duty is between 0 and 100.
+- `duty_pct = 0` → Carrier stays LOW during pulse windows (sync pins still indicate pulse/train).
+- `duty_pct = 100` → Carrier stays HIGH during pulse windows (no toggling inside the window).
+
+---
+
+## Build & Flash
+
+1. Open the sketch in the **Arduino IDE**.
+2. Select **Board:** *Arduino Due (Programming Port)*.
+3. Select the correct **Port**.
+4. Upload.
+5. Open **Serial Monitor** at **115200 baud**, set **line ending** to **Newline** (`\n`).
+
+> **Tip:** You can also drive the device from Python, MATLAB, or any environment that can open a serial port and send newline‑terminated strings.
+
+---
+
+## Quick MATLAB Snippet
+
+```matlab
+s = serialport("COM5", 115200);
+configureTerminator(s, "LF");
+writeline(s, "R");            % handshake
+writeline(s, "CFG 15000 35000 20 5000000 100 10000 5");
+writeline(s, "GO");
+pause(2);
+writeline(s, "COUNT");
+resp = readline(s)  % e.g., "COUNT=2"
+writeline(s, "STOP");
+```
+
+---
+
+## Electrical / Safety
+
+- Outputs are **3.3 V CMOS**. Use proper level shifting if a 5 V system is required.
+- Sync lines on pins **10** and **12** are **non‑PWM** and intended for **triggering/syncing** external equipment.
+- Ensure that connected equipment shares a **common ground**.
 
 ---
 
 ## Troubleshooting
 
-- **No response to `GO`:** Ensure you got an `OK …` echo after `CFG`. Check Serial line ending (must send newline).
-- **No output on D6:** Verify wiring and ground; try 100% duty to see a solid HIGH during the window.
-- **Looks unchanged when switching duty:** If `pulse_us` and `ipi_us` already yield a 50/50 period, `duty=50` matches that. Try a clearly different duty (e.g., 20 or 80) or set `pwm_hz` lower to see toggling on a scope.
+- **No response to commands:** Confirm newline (`\n`) terminator and 115200 baud.
+- **No PWM output:** Verify `duty_pct > 0`, `pulses_per_train ≥ 1`, and the correct **DIGITAL\_OUT\_PIN** wiring.
+- **COUNT always 0:** `COUNT` resets on `GO`; query after at least one train completes.
+- **Change pins/frequency:** Edit the `#define` section at the top of the sketch.
 
 ---
 
-## Changing the output pin (optional)
+## License
 
-Edit at the top of the sketch:
+MIT or similar—adapt as needed for your project.
 
-`#define DIGITAL_OUT_PIN 6   // set to your desired Due digital pin`
-
-Recompile and upload.
-
----
-
-That’s it—configure with `CFG …`, start with `GO`, stop with `STOP`.
